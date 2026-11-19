@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Demand Forecaster</title>
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--tx:#17211d;--mu:#62706a;--bd:#d9e0dc;--ac:#0b6b52;--fc:#d9480f;--in:#eef2f0}
+@media(prefers-color-scheme:dark){:root{--bg:#101614;--card:#18211e;--tx:#e6ede9;--mu:#93a39b;--bd:#2a3833;--ac:#4fd1a5;--fc:#ff8a4c;--in:#202b27}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 "Segoe UI",system-ui,Roboto,sans-serif;background:var(--bg);color:var(--tx)}
+header{padding:18px 24px;background:var(--ac);color:#fff}
+@media(prefers-color-scheme:dark){header{background:#12302a}}
+h1{margin:0;font-size:22px;font-weight:700}header p{margin:2px 0 0;opacity:.85;font-size:14px}
+main{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px;max-width:1280px;margin:auto}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:14px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 10px}
+label{display:block;font-size:13px;color:var(--mu);margin:8px 0 2px}
+label b{float:right;color:var(--tx)}
+input[type=number],input[type=text],select,textarea{width:100%;padding:7px 8px;border:1px solid var(--bd);border-radius:6px;background:var(--in);color:var(--tx);font:inherit}
+input[type=range]{width:100%;accent-color:var(--ac)}
+textarea{margin-top:8px;font-size:13px}
+button{padding:7px 12px;border:0;border-radius:6px;background:var(--ac);color:#fff;font:inherit;cursor:pointer;margin:8px 6px 0 0}
+@media(prefers-color-scheme:dark){button{color:#07130f}}
+button.g{background:var(--in);color:var(--tx);border:1px solid var(--bd)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--fc);outline-offset:1px}
+.mu{color:var(--mu);font-size:13px;margin-top:6px}.err{color:var(--fc)}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.k div{background:var(--in);border-radius:6px;padding:8px 10px}.k span{display:block;font-size:12px;color:var(--mu)}.k strong{font-size:19px}
+canvas{width:100%;height:320px;display:block}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:right}th:first-child,td:first-child{text-align:left}
+.sc{overflow-x:auto}#mt{max-height:240px;overflow-y:auto;margin-top:8px}#mt td{padding:3px 4px;border:0;text-align:left}#mt td:last-child{width:34px}#mt button{margin:0;padding:5px 9px}.leg{font-size:12px;color:var(--mu);margin-top:4px}
+</style></head><body>
+<header><h1>Demand Forecaster</h1><p>Upload past demand, choose a method, tune the parameters and forecast the next quarter.</p></header>
+<main>
+<div>
+<section class="card"><h2>1. Past demand data</h2>
+<label>Upload an Excel (.xlsx, .xls) or CSV file</label><input type="file" id="file" accept=".csv,.txt,.xlsx,.xls">
+<textarea id="paste" rows="5" placeholder="Paste one demand value per line, or Period,Demand pairs"></textarea>
+<button id="useP">Use pasted data</button><button id="samp" class="g">Load sample data</button>
+<details open style="margin-top:10px"><summary><b>Enter or edit demand manually</b></summary>
+<div class="sc" id="mt"><table><tbody id="mb"></tbody></table></div>
+<button id="addR" class="g">Add row</button><button id="add12" class="g">Add 12 rows</button><button id="clrR" class="g">Clear all</button><button id="useM">Update forecast</button>
+<div class="mu">Loaded data also appears here, so you can correct values and click Update forecast.</div></details>
+<div id="msg" class="mu">Excel files: the first sheet is read, using the last numeric column as demand and the first column as the period name.</div></section>
+<section class="card"><h2>2. Forecast setup</h2>
+<label>Data frequency</label><select id="freq"><option value="12,3">Monthly (next quarter = 3 periods)</option><option value="4,1">Quarterly (next quarter = 1 period)</option><option value="52,13">Weekly (next quarter = 13 periods)</option><option value="7,30">Daily (next 30 days)</option></select>
+<label>Periods to forecast</label><input type="number" id="h" min="1" max="120" value="3">
+<label>Forecasting method</label><select id="method"><option value="avg">Simple average</option><option value="ses">Exponential smoothing</option><option value="holt" selected>Trend-adjusted exponential smoothing</option><option value="hw">Seasonal trend-adjusted exponential smoothing</option></select></section>
+<section class="card"><h2>3. Parameters</h2>
+<div class="p" data-m="ses holt hw"><label>Alpha (α), smoothness / responsiveness <b id="aV"></b></label><input type="range" id="a" min="0.01" max="1" step="0.01" value="0.3"></div>
+<div class="p" data-m="holt hw"><label>Beta (β), trend <b id="bV"></b></label><input type="range" id="b" min="0.01" max="1" step="0.01" value="0.2"></div>
+<div class="p" data-m="hw"><label>Gamma (γ), seasonality <b id="gV"></b></label><input type="range" id="g" min="0.01" max="1" step="0.01" value="0.2"></div>
+<div class="p" data-m="hw"><label>Season length (periods per cycle)</label><input type="number" id="L" min="2" max="60" value="12">
+<label>Seasonal pattern</label><select id="mult"><option value="1">Multiplicative (swings grow with demand)</option><option value="0">Additive (constant swings)</option></select></div>
+<button id="opt">Auto-optimise (lowest MSE)</button>
+<div class="mu" id="pn">Higher values react faster to recent data; lower values give smoother forecasts.</div></section>
+</div>
+<div>
+<section class="card"><div class="k" id="kpi"></div></section>
+<section class="card"><h2>Demand and forecast</h2><canvas id="cv"></canvas><div class="leg">Blue: actual demand | Grey dashed: fitted forecast | Orange: future forecast</div></section>
+<section class="card"><h2>Forecast values</h2><div class="sc"><table id="ft"></table></div><button id="dl" class="g">Download forecast CSV</button></section>
+<section class="card"><h2>Compare methods (current parameters)</h2><div class="sc"><table id="cmp"></table></div></section>
+</div></main>
+<script src="xlsx.full.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let data=[],labels=[],last=null;
+const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const mean=a=>a.reduce((s,x)=>s+x,0)/a.length;
+const fmt=v=>isFinite(v)?v.toLocaleString(undefined,{maximumFractionDigits:1}):"-";
+const NUM=/^-?[\d.,]+$/;
+function fromRows(rows){const L=[],D=[];rows.forEach(r=>{const c=r.map(x=>String(x==null?"":x).trim().replace(/^"|"$/g,""));let j=-1;for(let i=c.length-1;i>=0;i--){if(NUM.test(c[i])&&isFinite(+c[i].replace(/,/g,""))){j=i;break}}if(j<0)return;D.push(+c[j].replace(/,/g,""));L.push(j>0&&c[0]?c[0]:"P"+D.length)});return{L,D}}
+function parse(t){return fromRows(t.split(/\r?\n/).map(l=>l.split(/[,\t;]/)))}
+function setArr(r){if(r.D.length<3){$("msg").textContent="Could not read at least 3 numeric demand values. Check the file or the manual entries.";$("msg").className="mu err";return}
+data=r.D;labels=r.L;fillManual();render()}
+function setData(t){setArr(parse(t))}
+function addRow(l,v){const tr=document.createElement("tr");tr.innerHTML='<td><input type="text" placeholder="Period"></td><td><input type="number" step="any" placeholder="Demand"></td><td><button class="g" title="Remove row">x</button></td>';
+const i=tr.querySelectorAll("input");i[0].value=l==null?"":l;i[1].value=v==null?"":v;tr.querySelector("button").onclick=()=>tr.remove();$("mb").appendChild(tr)}
+function fillManual(){$("mb").innerHTML="";labels.forEach((l,i)=>addRow(l,data[i]))}
+function useManual(){const L=[],D=[];$("mb").querySelectorAll("tr").forEach(tr=>{const i=tr.querySelectorAll("input"),v=parseFloat(i[1].value);if(!isFinite(v))return;D.push(v);L.push(i[0].value.trim()||"P"+D.length)});setArr({L,D})}
+function sample(){const L=[],D=[];for(let t=0;t<36;t++){L.push(MN[t%12]+"-"+(24+Math.floor(t/12)));D.push(Math.round((200+3*t)*(1+.25*Math.sin(2*Math.PI*t/12-1))+8*Math.sin(t*7)))}
+setData("Period,Demand\n"+L.map((l,i)=>l+","+D[i]).join("\n"))}
+function getP(){return{a:+$("a").value,b:+$("b").value,g:+$("g").value,L:Math.max(2,+$("L").value||12),mult:$("mult").value==="1"}}
+function run(m,D,P,h){const n=D.length,f=Array(n).fill(null),F=[];
+if(m==="avg"){for(let t=1;t<n;t++)f[t]=mean(D.slice(0,t));for(let i=0;i<h;i++)F.push(mean(D))}
+else if(m==="ses"){let l=D[0];for(let t=1;t<n;t++){f[t]=l;l=P.a*D[t]+(1-P.a)*l}for(let i=0;i<h;i++)F.push(l)}
+else if(m==="holt"){const k=Math.min(3,n-1);let l=D[0],T=(D[k]-D[0])/k;for(let t=1;t<n;t++){f[t]=l+T;const pl=l;l=P.a*D[t]+(1-P.a)*(l+T);T=P.b*(l-pl)+(1-P.b)*T}for(let i=1;i<=h;i++)F.push(l+i*T)}
+else{const L=P.L,u=P.mult;if(n<2*L)return{err:"The seasonal method needs at least 2 full seasons ("+2*L+" periods). You have "+n+". Reduce the season length or add data."};
+const A=[];for(let s=0;s<Math.floor(n/L);s++)A.push(mean(D.slice(s*L,s*L+L)));
+const S=[];for(let i=0;i<L;i++){let c=0;A.forEach((a,s)=>{c+=u?D[s*L+i]/a:D[s*L+i]-a});S.push(c/A.length)}
+let T=(A[1]-A[0])/L,l=A[0]+T*(L-1)/2;
+for(let t=L;t<n;t++){const s=S[t%L];f[t]=u?(l+T)*s:l+T+s;const pl=l;l=u?P.a*D[t]/s+(1-P.a)*(l+T):P.a*(D[t]-s)+(1-P.a)*(l+T);T=P.b*(l-pl)+(1-P.b)*T;S[t%L]=u?P.g*D[t]/l+(1-P.g)*s:P.g*(D[t]-l)+(1-P.g)*s}
+for(let i=1;i<=h;i++){const s=S[(n-1+i)%L];F.push(u?(l+i*T)*s:l+i*T+s)}}
+return{f,F:F.map(x=>Math.max(0,x))}}
+function metrics(D,f){const e=[],ap=[];D.forEach((d,t)=>{if(f[t]==null)return;e.push(d-f[t]);if(d)ap.push(Math.abs(d-f[t])/Math.abs(d))});if(!e.length)return null;
+const n=e.length,sum=e.reduce((s,x)=>s+x,0),mad=e.reduce((s,x)=>s+Math.abs(x),0)/n;
+return{mad,mse:e.reduce((s,x)=>s+x*x,0)/n,mape:ap.length?mean(ap)*100:NaN,bias:sum/n,ts:mad?sum/mad:0}}
+function opt(){const m=$("method").value,need={ses:["a"],holt:["a","b"],hw:["a","b","g"]}[m];if(!need||!data.length)return;
+const g=[];for(let x=.05;x<1;x+=.05)g.push(+x.toFixed(2));let best=null;
+const loop=(i,P)=>{if(i===need.length){const r=run(m,data,P,1);if(r.err)return;const k=metrics(data,r.f);if(k&&(!best||k.mse<best.v))best={v:k.mse,P:{...P}};return}g.forEach(v=>loop(i+1,{...P,[need[i]]:v}))};
+loop(0,getP());if(best){need.forEach(k=>$(k).value=best.P[k]);render()}}
+function draw(f,F){const c=$("cv"),r=c.getBoundingClientRect(),d=devicePixelRatio||1;c.width=r.width*d;c.height=r.height*d;const x=c.getContext("2d");x.scale(d,d);
+const W=r.width,H=r.height,m={l:50,r:14,t:14,b:34},css=getComputedStyle(document.documentElement),col=k=>css.getPropertyValue(k).trim();
+const n=data.length,N=n+F.length,vals=[...data,...F,...f.filter(v=>v!=null)];let lo=Math.min(...vals),hi=Math.max(...vals);const pad=(hi-lo)*.1||1;lo=Math.max(0,lo-pad);hi+=pad;
+const X=i=>m.l+i*(W-m.l-m.r)/Math.max(1,N-1),Y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+x.font="11px system-ui";x.fillStyle=col("--mu");x.strokeStyle=col("--bd");x.lineWidth=1;
+for(let i=0;i<=4;i++){const v=lo+(hi-lo)*i/4,y=Y(v);x.beginPath();x.moveTo(m.l,y);x.lineTo(W-m.r,y);x.stroke();x.textAlign="right";x.fillText(Math.round(v),m.l-6,y+4)}
+const st=Math.ceil(N/10);x.textAlign="center";for(let i=0;i<N;i+=st)x.fillText(i<n?labels[i]:"F"+(i-n+1),X(i),H-m.b+16);
+const line=(pts,color,dash,dots)=>{x.beginPath();x.setLineDash(dash);x.strokeStyle=color;x.lineWidth=2;let s=false;pts.forEach(([i,v])=>{if(v==null){s=false;return}s?x.lineTo(X(i),Y(v)):x.moveTo(X(i),Y(v));s=true});x.stroke();x.setLineDash([]);
+if(dots)pts.forEach(([i,v])=>{if(v==null)return;x.beginPath();x.fillStyle=color;x.arc(X(i),Y(v),3,0,7);x.fill()})};
+line(data.map((v,i)=>[i,v]),col("--ac"),[],1);line(f.map((v,i)=>[i,v]),col("--mu"),[5,4],0);line([[n-1,data[n-1]],...F.map((v,i)=>[n+i,v])],col("--fc"),[],1)}
+function render(){const m=$("method").value;
+document.querySelectorAll(".p").forEach(e=>e.hidden=!e.dataset.m.split(" ").includes(m));
+["a","b","g"].forEach(k=>$(k+"V").textContent=(+$(k).value).toFixed(2));
+$("opt").hidden=m==="avg";if(!data.length)return;
+const P=getP(),h=Math.max(1,+$("h").value||3),r=run(m,data,P,h);
+if(r.err){$("msg").className="mu err";$("msg").textContent=r.err;return}
+$("msg").className="mu";$("msg").textContent=data.length+" periods loaded.";
+const k=metrics(data,r.f),tot=r.F.reduce((s,x)=>s+x,0);last=r.F;
+$("kpi").innerHTML=[["Total, next "+h+" periods",fmt(tot)],["Average per period",fmt(tot/h)],["MAD",fmt(k.mad)],["MAPE",isFinite(k.mape)?fmt(k.mape)+"%":"-"],["MSE",fmt(k.mse)],["Bias",fmt(k.bias)],["Tracking signal",fmt(k.ts)]].map(a=>"<div><span>"+a[0]+"</span><strong>"+a[1]+"</strong></div>").join("");
+$("ft").innerHTML="<tr><th>Period</th><th>Forecast demand</th></tr>"+r.F.map((v,i)=>"<tr><td>Forecast +"+(i+1)+"</td><td>"+fmt(v)+"</td></tr>").join("")+"<tr><th>Total</th><th>"+fmt(tot)+"</th></tr>";
+const rows=[["avg","Simple average"],["ses","Exponential smoothing"],["holt","Trend-adjusted"],["hw","Seasonal trend-adjusted"]].map(([id,nm])=>{const q=run(id,data,P,h);if(q.err)return[nm,null];return[nm,metrics(data,q.f),q.F.reduce((s,x)=>s+x,0)]});
+const bm=Math.min(...rows.filter(x=>x[1]).map(x=>x[1].mad));
+$("cmp").innerHTML="<tr><th>Method</th><th>MAD</th><th>MAPE</th><th>Forecast total</th></tr>"+rows.map(x=>x[1]?"<tr><td>"+x[0]+(x[1].mad===bm?" (lowest MAD)":"")+"</td><td>"+fmt(x[1].mad)+"</td><td>"+(isFinite(x[1].mape)?fmt(x[1].mape)+"%":"-")+"</td><td>"+fmt(x[2])+"</td></tr>":"<tr><td>"+x[0]+"</td><td colspan=3>Needs 2+ full seasons of data</td></tr>").join("");
+draw(r.f,r.F)}
+$("file").onchange=e=>{const f=e.target.files[0];if(!f)return;
+if(/\.xlsx?$/i.test(f.name)){if(typeof XLSX==="undefined"){$("msg").textContent="Excel reader not loaded. Keep xlsx.full.min.js next to index.html, or save the sheet as CSV.";$("msg").className="mu err";return}
+f.arrayBuffer().then(b=>{const wb=XLSX.read(b,{type:"array"});setArr(fromRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:""})))})}
+else f.text().then(setData)};
+$("addR").onclick=()=>addRow();$("add12").onclick=()=>{for(let k=0;k<12;k++)addRow();$("mt").scrollTop=1e6};
+$("clrR").onclick=()=>{$("mb").innerHTML="";for(let k=0;k<12;k++)addRow()};$("useM").onclick=useManual;
+$("useP").onclick=()=>setData($("paste").value);$("samp").onclick=sample;$("opt").onclick=opt;
+$("freq").onchange=()=>{const[v,h]=$("freq").value.split(",");$("L").value=v;$("h").value=h;render()};
+["method","a","b","g","L","mult","h"].forEach(id=>$(id).addEventListener("input",render));
+$("dl").onclick=()=>{if(!last)return;const u=URL.createObjectURL(new Blob(["Period,Forecast\n"+last.map((v,i)=>"Forecast +"+(i+1)+","+v.toFixed(2)).join("\n")],{type:"text/csv"}));const a=document.createElement("a");a.href=u;a.download="forecast.csv";a.click();URL.revokeObjectURL(u)};
+addEventListener("resize",()=>data.length&&render());
+sample();
+</script></body></html>
